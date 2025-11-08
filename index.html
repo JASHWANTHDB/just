@@ -460,7 +460,38 @@
     <i>⚙️</i>
   </div>
 
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script>
+    // ---------- IMPORTANT ----------
+    // This app now uses Firestore for real-time, multi-device voting.
+    // You MUST create a Firebase project, enable Firestore, and replace the firebaseConfig below.
+    // Also set Firestore rules to secure rooms properly (see README or the instructions at the end of this file).
+    // --------------------------------
+
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyA5T8KUr8Pd_-2IRyOt5H7d-cF4cqy3-mE",
+      authDomain: "just-8f47d.firebaseapp.com",
+      projectId: "just-8f47d",
+      storageBucket: "just-8f47d.firebasestorage.app",
+      messagingSenderId: "549636932164",
+      appId: "1:549636932164:web:bf84d7d2eea29b4cbbf211",
+      measurementId: "G-7XZFDTE05W"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    
+    // Sign in anonymously on page load
+    auth.signInAnonymously().catch(error => {
+      console.error('Auth error:', error);
+      showNotification('Authentication failed', 'error');
+    });
+
     // DOM Elements
     const home = document.getElementById('home');
     const hostSetup = document.getElementById('hostSetup');
@@ -491,58 +522,35 @@
 
     let currentRoom = null;
     let isHost = false;
-    let timer;
+    let timer = null;
     let selectedCandidate = null;
-    let allRooms = {}; // In-memory storage for rooms
+    let roomUnsubscribe = null; // Firestore listener unsubscribe
 
-    // Initialize rooms from localStorage if available
-    function initializeRooms() {
-      const storedRooms = localStorage.getItem('electionRooms');
-      if (storedRooms) {
-        allRooms = JSON.parse(storedRooms);
+    // Utility: simple UUID v4 for host secret
+    function uuidv4() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    // Generate unique 6-digit code (avoid collisions by checking Firestore)
+    async function generateUniqueCode() {
+      while (true) {
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const doc = await db.collection('rooms').doc(code).get();
+        if (!doc.exists) return code;
       }
-      
-      // Check if we have a room code in URL parameters
-      const urlParams = new URLSearchParams(window.location.search);
-      const roomCodeFromUrl = urlParams.get('room');
-      if (roomCodeFromUrl) {
-        joinCodeInput.value = roomCodeFromUrl;
-      }
     }
 
-    // Generate random 6-digit code
-    function generateCode() {
-      let code;
-      do {
-        code = Math.floor(100000 + Math.random() * 900000).toString();
-      } while (allRooms[code]); // Ensure unique code
-      return code;
-    }
-
-    // Save room data
-    function saveRoom(roomCode, data) {
-      allRooms[roomCode] = data;
-      localStorage.setItem('electionRooms', JSON.stringify(allRooms));
-    }
-
-    function getRoom(roomCode) {
-      return allRooms[roomCode];
-    }
-
-    // Show notification
     function showNotification(message, type = 'success') {
       notification.textContent = message;
       notification.className = `notification ${type} show`;
-      
-      setTimeout(() => {
-        notification.classList.remove('show');
-      }, 3000);
+      setTimeout(() => notification.classList.remove('show'), 3000);
     }
 
-    // Create confetti effect
     function createConfetti() {
       const colors = ['#4f46e5', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-      
       for (let i = 0; i < 100; i++) {
         const confetti = document.createElement('div');
         confetti.className = 'confetti';
@@ -550,329 +558,320 @@
         confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
         confetti.style.animation = `confettiFall ${Math.random() * 3 + 2}s linear forwards`;
         document.body.appendChild(confetti);
-        
-        setTimeout(() => {
-          confetti.remove();
-        }, 5000);
+        setTimeout(() => confetti.remove(), 5000);
       }
     }
 
-    // Initialize the app
-    function initializeApp() {
-      initializeRooms();
-      
-      // Add ripple effect to buttons
+    // Attach real-time listener for a room
+    function attachRoomListener(roomCode, onUpdate) {
+      if (roomUnsubscribe) roomUnsubscribe();
+      const docRef = db.collection('rooms').doc(roomCode);
+      roomUnsubscribe = docRef.onSnapshot(snapshot => {
+        if (!snapshot.exists) return;
+        const data = snapshot.data();
+        onUpdate(data);
+      }, err => {
+        console.error('Room listener error', err);
+      });
+    }
+
+    // Initialize UI behaviors
+    function initializeUI() {
+      // Ripple effect kept from original
       document.querySelectorAll('button').forEach(button => {
         button.addEventListener('click', function(e) {
           const x = e.clientX - e.target.getBoundingClientRect().left;
           const y = e.clientY - e.target.getBoundingClientRect().top;
-          
           const ripple = document.createElement('span');
           ripple.style.left = x + 'px';
           ripple.style.top = y + 'px';
           ripple.classList.add('ripple');
-          
           this.appendChild(ripple);
-          
-          setTimeout(() => {
-            ripple.remove();
-          }, 600);
+          setTimeout(() => ripple.remove(), 600);
         });
       });
+
+      // Check URL for room param
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomCodeFromUrl = urlParams.get('room');
+      if (roomCodeFromUrl) joinCodeInput.value = roomCodeFromUrl;
     }
 
-    // Initialize on page load
-    document.addEventListener('DOMContentLoaded', initializeApp);
+    document.addEventListener('DOMContentLoaded', initializeUI);
 
-    // Create room button handler
-    createRoomBtn.onclick = () => {
-      currentRoom = generateCode();
-      isHost = true;
-      roomCodeDisplay.textContent = currentRoom;
-      saveRoom(currentRoom, { 
-        candidates: [], 
-        votes: {}, 
-        started: false,
-        host: true,
-        morePostsRequested: false,
-        createdAt: new Date().toISOString()
-      });
-      
-      home.classList.add('hidden');
-      hostSetup.classList.remove('hidden');
-      floatingActionBtn.classList.remove('hidden');
-      
-      showNotification('Election created successfully! Share the code with voters.', 'success');
+    // CREATE ROOM - host
+    createRoomBtn.onclick = async () => {
+      try {
+        createRoomBtn.disabled = true;
+        const code = await generateUniqueCode();
+        const hostSecret = uuidv4();
+        const roomDoc = {
+          candidates: [],
+          votes: {},
+          started: false,
+          hostSecret: hostSecret,
+          hostUid: auth.currentUser.uid, // Store host's UID
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          durationSeconds: 60,
+          voters: {}
+        };
+        await db.collection('rooms').doc(code).set(roomDoc);
+
+        currentRoom = code;
+        isHost = true;
+        // store host secret locally so only host can view results
+        localStorage.setItem('hostSecret:' + code, hostSecret);
+        roomCodeDisplay.textContent = code + ' (keep this secret)';
+
+        home.classList.add('hidden');
+        hostSetup.classList.remove('hidden');
+        floatingActionBtn.classList.remove('hidden');
+        showNotification('Election created. Share code with voters.', 'success');
+
+        // Listen for updates
+        attachRoomListener(code, data => {
+          updateCandidateList(data.candidates || []);
+          if (data.started) {
+            // show voting page for host when voting started
+            hostSetup.classList.add('hidden');
+            voterPage.classList.remove('hidden');
+            startTimer(data.durationSeconds || 60, data.startedAt ? data.startedAt.toMillis() : null);
+            loadVotingCandidates(data.candidates || []);
+          }
+          // If voting ended and host, show results
+          if (data.ended && isHost) showResultsFromData(data);
+        });
+      } catch (err) {
+        console.error(err);
+        showNotification('Failed to create election', 'error');
+      } finally {
+        createRoomBtn.disabled = false;
+      }
     };
 
-    // Share link button handler
+    // COPY SHARE LINK
     shareLinkBtn.onclick = () => {
+      if (!currentRoom) return showNotification('Create a room first', 'error');
       const shareUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
-      
-      // Copy to clipboard
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        showNotification('Share link copied to clipboard!', 'success');
-      }).catch(() => {
-        // Fallback for browsers that don't support clipboard API
-        const tempInput = document.createElement('input');
-        tempInput.value = shareUrl;
-        document.body.appendChild(tempInput);
-        tempInput.select();
-        document.execCommand('copy');
-        document.body.removeChild(tempInput);
-        showNotification('Share link copied to clipboard!', 'success');
-      });
+      navigator.clipboard.writeText(shareUrl).then(() => showNotification('Share link copied', 'success'))
+        .catch(() => showNotification('Copy failed', 'error'));
     };
 
-    // Add candidate button handler
-    addCandidateBtn.onclick = () => {
+    // ADD CANDIDATE (host)
+    addCandidateBtn.onclick = async () => {
       const name = candidateName.value.trim();
-      if (!name) return showNotification("Please enter candidate name", "error");
-      
-      let roomData = getRoom(currentRoom);
-      if (!roomData) {
-        showNotification("Election room not found. Please create a new one.", "error");
-        return;
-      }
-      
-      roomData.candidates.push(name);
-      saveRoom(currentRoom, roomData);
-      candidateName.value = "";
-      updateCandidateList(roomData.candidates);
-      
-      // Show more posts button if we have 3 or more candidates
-      if (roomData.candidates.length >= 3 && !roomData.morePostsRequested) {
-        morePostsBtn.classList.remove('hidden');
-      }
+      if (!name) return showNotification('Enter candidate name', 'error');
+      if (!currentRoom) return showNotification('No active room', 'error');
+      try {
+        addCandidateBtn.disabled = true;
+        const roomRef = db.collection('rooms').doc(currentRoom);
+        await roomRef.update({ candidates: firebase.firestore.FieldValue.arrayUnion(name) });
+        candidateName.value = '';
+        showNotification('Candidate added', 'success');
+      } catch (err) {
+        console.error(err);
+        showNotification('Failed to add candidate', 'error');
+      } finally { addCandidateBtn.disabled = false; }
     };
 
     function updateCandidateList(list) {
-      candidateList.innerHTML = "";
+      candidateList.innerHTML = '';
       list.forEach((c, i) => {
         const div = document.createElement('div');
         div.className = 'candidate';
-        div.innerHTML = `
-          <div class="candidate-number">${i+1}</div>
-          <div>${c}</div>
-        `;
+        div.innerHTML = `<div class="candidate-number">${i+1}</div><div>${c}</div>`;
         candidateList.appendChild(div);
       });
     }
 
-    // Start voting button handler
-    startVotingBtn.onclick = () => {
-      let roomData = getRoom(currentRoom);
-      if (!roomData) {
-        showNotification("Election room not found. Please create a new one.", "error");
-        return;
-      }
-      
-      if (roomData.candidates.length === 0) {
-        return showNotification("Add at least one candidate!", "error");
-      }
-      
-      roomData.started = true;
-      saveRoom(currentRoom, roomData);
-      hostSetup.classList.add('hidden');
-      voterPage.classList.remove('hidden');
-      floatingActionBtn.classList.add('hidden');
-      startTimer(60); // 60 seconds for voting
-      loadVotingCandidates(roomData.candidates);
+    // START VOTING (host)
+    startVotingBtn.onclick = async () => {
+      if (!currentRoom) return showNotification('Create a room first', 'error');
+      try {
+        startVotingBtn.disabled = true;
+        const startedAt = firebase.firestore.Timestamp.now();
+        const durationSeconds = 60; // configurable
+        await db.collection('rooms').doc(currentRoom).update({ started: true, startedAt: startedAt, durationSeconds: durationSeconds, ended: false });
+        showNotification('Voting started', 'success');
+      } catch (err) {
+        console.error(err);
+        showNotification('Failed to start voting', 'error');
+      } finally { startVotingBtn.disabled = false; }
     };
 
-    // Join election button handler
-    joinBtn.onclick = () => {
+    // JOIN (voter)
+    joinBtn.onclick = async () => {
       const code = joinCodeInput.value.trim();
-      if (!code) return showNotification("Please enter a valid code", "error");
-      
-      // Show loading state
-      joinBtn.innerHTML = '<span class="loading"></span> Joining...';
+      if (!code) return showNotification('Enter a room code', 'error');
       joinBtn.disabled = true;
-      
-      // Simulate network delay
-      setTimeout(() => {
-        const roomData = getRoom(code);
-        if (!roomData) {
-          showNotification("No election found for this code. Make sure the host has created the election.", "error");
-          joinBtn.innerHTML = 'Join Election';
-          joinBtn.disabled = false;
-          return;
-        }
-        
-        if (!roomData.started) {
-          showNotification("Voting hasn't started yet. Please wait for the host to begin.", "warning");
-          joinBtn.innerHTML = 'Join Election';
-          joinBtn.disabled = false;
-          return;
-        }
-        
-        currentRoom = code;
-        isHost = false;
+      joinBtn.innerHTML = '<span class="loading"></span> Joining...';
+      try {
+        const doc = await db.collection('rooms').doc(code).get();
+        if (!doc.exists) return showNotification('Room not found', 'error');
+        const data = doc.data();
+        if (!data.started) return showNotification('Voting has not started yet', 'warning');
+        currentRoom = code; isHost = false;
+
         home.classList.add('hidden');
         voterPage.classList.remove('hidden');
-        loadVotingCandidates(roomData.candidates);
-        startTimer(60); // 60 seconds for voting
-        
-        joinBtn.innerHTML = 'Join Election';
-        joinBtn.disabled = false;
-      }, 800);
+        loadVotingCandidates(data.candidates || []);
+
+        // Real-time updates for votes (so voters see live state if needed)
+        attachRoomListener(code, updated => {
+          // show vote counts to host only
+          if (!isHost) return;
+        });
+        // Start timer aligned with server time if startedAt present
+        startTimer(data.durationSeconds || 60, data.startedAt ? data.startedAt.toMillis() : null);
+      } catch (err) {
+        console.error(err);
+        showNotification('Failed to join', 'error');
+      } finally { joinBtn.disabled = false; joinBtn.innerHTML = 'Join Election'; }
     };
 
+    // Load voting candidates into voter UI and bind click handlers
     function loadVotingCandidates(candidates) {
-      voteCandidates.innerHTML = "";
-      candidates.forEach(c => {
+      voteCandidates.innerHTML = '';
+      candidates.forEach(name => {
         const div = document.createElement('div');
         div.className = 'candidate';
-        div.innerHTML = `
-          <div>${c}</div>
-        `;
-        div.onclick = () => {
-          // Deselect previous selection
-          if (selectedCandidate) {
-            selectedCandidate.classList.remove('selected');
+        div.innerHTML = `<div>${name}</div>`;
+        div.onclick = async () => {
+          // disable further clicks locally
+          voteCandidates.querySelectorAll('.candidate').forEach(el => el.style.pointerEvents = 'none');
+          try {
+            // Atomic increment using transaction with voter tracking
+            const roomRef = db.collection('rooms').doc(currentRoom);
+            const voterUid = auth.currentUser.uid;
+            
+            await db.runTransaction(async tx => {
+              const roomSnap = await tx.get(roomRef);
+              if (!roomSnap.exists) throw new Error('Room not found');
+              const roomData = roomSnap.data();
+              
+              // Check if voting is open
+              if (!roomData.started || roomData.ended) throw new Error('Voting closed');
+              
+              // Check if user already voted
+              const voters = roomData.voters || {};
+              if (voters[voterUid]) throw new Error('You have already voted');
+              
+              // Update votes and mark user as voted
+              const votes = roomData.votes || {};
+              const current = votes[name] || 0;
+              votes[name] = current + 1;
+              voters[voterUid] = true;
+              
+              tx.update(roomRef, { 
+                votes: votes,
+                voters: voters,
+                totalVotes: firebase.firestore.FieldValue.increment(1)
+              });
+            });
+            showNotification('Vote submitted', 'success');
+          } catch (err) {
+            console.error(err);
+            showNotification('Failed to submit vote', 'error');
           }
-          
-          // Select new candidate
-          div.classList.add('selected');
-          selectedCandidate = div;
-          
-          let roomData = getRoom(currentRoom);
-          if (!roomData) {
-            showNotification("Error submitting vote. Please try again.", "error");
-            return;
-          }
-          
-          roomData.votes[c] = (roomData.votes[c] || 0) + 1;
-          saveRoom(currentRoom, roomData);
-          
-          showNotification("Vote submitted successfully!", "success");
-          
-          // Disable further voting
-          voteCandidates.querySelectorAll('.candidate').forEach(el => {
-            el.style.pointerEvents = "none";
-          });
         };
         voteCandidates.appendChild(div);
       });
     }
 
-    function startTimer(seconds) {
-      let timeLeft = seconds;
-      voteTimer.textContent = `Time left: ${timeLeft}s`;
-      timer = setInterval(() => {
-        timeLeft--;
-        voteTimer.textContent = `Time left: ${timeLeft}s`;
-        
-        if (timeLeft <= 10) {
-          voteTimer.style.color = 'var(--danger)';
-        }
-        
-        if (timeLeft <= 0) {
-          clearInterval(timer);
-          voteTimer.textContent = "Voting Closed!";
-          
-          if (isHost) {
-            setTimeout(showResults, 1500);
-          } else {
-            showNotification("Voting time over! Please wait for host to announce results.", "warning");
+    // timer: if startedAtMillis provided, compute remaining relative to that timestamp
+    function startTimer(seconds, startedAtMillis = null) {
+      if (timer) clearInterval(timer);
+      let endTime = Date.now() + seconds * 1000;
+      if (startedAtMillis) {
+        endTime = startedAtMillis + seconds * 1000;
+      }
+      function tick() {
+        const msLeft = endTime - Date.now();
+        const sLeft = Math.max(0, Math.ceil(msLeft / 1000));
+        voteTimer.textContent = `Time left: ${sLeft}s`;
+        if (sLeft <= 10) voteTimer.style.color = 'var(--danger)';
+        if (msLeft <= 0) {
+          clearInterval(timer); timer = null; voteTimer.textContent = 'Voting Closed!';
+          // mark ended in Firestore (host will do this or we can set it here)
+          if (isHost && currentRoom) {
+            db.collection('rooms').doc(currentRoom).update({ ended: true }).catch(console.error);
           }
         }
-      }, 1000);
+      }
+      tick();
+      timer = setInterval(tick, 1000);
     }
 
-    function showResults() {
+    // Show results for host using data from Firestore
+    function showResultsFromData(data) {
       voterPage.classList.add('hidden');
       hostResult.classList.remove('hidden');
-      const roomData = getRoom(currentRoom);
-      if (!roomData) {
-        showNotification("Error loading results", "error");
-        return;
-      }
-      
-      results.innerHTML = "";
-      
-      // Calculate total votes
-      const totalVotes = Object.values(roomData.votes).reduce((a, b) => a + b, 0);
-      
-      // Sort candidates by votes
-      const sortedCandidates = Object.entries(roomData.votes)
-        .sort((a, b) => b[1] - a[1]);
-      
-      sortedCandidates.forEach(([name, count]) => {
-        const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-        
-        const resultItem = document.createElement('div');
-        resultItem.innerHTML = `
-          <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-            <span>${name}</span>
-            <span>${count} votes (${percentage}%)</span>
-          </div>
-          <div class="result-bar">
-            <div class="result-fill" style="width: ${percentage}%">${percentage}%</div>
-          </div>
-        `;
-        results.appendChild(resultItem);
+      results.innerHTML = '';
+      const votes = data.votes || {};
+      const total = Object.values(votes).reduce((a, b) => a + b, 0);
+      const entries = Object.entries(votes).sort((a, b) => b[1] - a[1]);
+      entries.forEach(([name, count]) => {
+        const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+        const item = document.createElement('div');
+        item.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>${name}</span><span>${count} votes (${percentage}%)</span></div><div class='result-bar'><div class='result-fill' style='width:${percentage}%'>${percentage}%</div></div>`;
+        results.appendChild(item);
       });
-      
-      // Create confetti for the winner
-      if (sortedCandidates.length > 0) {
-        createConfetti();
-      }
+      if (entries.length > 0) createConfetti();
     }
 
-    // More Posts functionality
-    morePostsBtn.onclick = () => {
-      hostSetup.classList.add('hidden');
-      morePostsModal.classList.remove('hidden');
-    };
-
-    submitRequestBtn.onclick = () => {
-      const reason = reasonText.value.trim();
-      if (!reason) return showNotification("Please provide a reason", "error");
-      
-      // In a real app, this would send the request to an admin
-      showNotification("Request submitted! An admin will review it shortly.", "success");
-      
-      // Update room data to mark request as submitted
-      let roomData = getRoom(currentRoom);
-      if (!roomData) {
-        showNotification("Error submitting request", "error");
-        return;
-      }
-      
-      roomData.morePostsRequested = true;
-      saveRoom(currentRoom, roomData);
-      
-      morePostsModal.classList.add('hidden');
-      hostSetup.classList.remove('hidden');
-      morePostsBtn.classList.add('hidden');
-    };
-
-    cancelRequestBtn.onclick = () => {
-      morePostsModal.classList.add('hidden');
-      hostSetup.classList.remove('hidden');
-    };
-
-    // New election button
+    // New election
     newElectionBtn.onclick = () => {
       hostResult.classList.add('hidden');
       home.classList.remove('hidden');
-      currentRoom = null;
-      isHost = false;
+      currentRoom = null; isHost = false;
+      if (roomUnsubscribe) { roomUnsubscribe(); roomUnsubscribe = null; }
     };
 
-    // Floating action button for host
+    // More posts request (keeps previous UX but stores flag in Firestore)
+    morePostsBtn.onclick = () => { hostSetup.classList.add('hidden'); morePostsModal.classList.remove('hidden'); };
+    submitRequestBtn.onclick = async () => {
+      const reason = reasonText.value.trim(); if (!reason) return showNotification('Please provide a reason', 'error');
+      if (!currentRoom) return showNotification('No active room', 'error');
+      try {
+        await db.collection('rooms').doc(currentRoom).update({ morePostsRequested: true, morePostsReason: reason });
+        showNotification('Request submitted', 'success');
+      } catch (err) { console.error(err); showNotification('Submit failed', 'error'); }
+      morePostsModal.classList.add('hidden'); hostSetup.classList.remove('hidden'); morePostsBtn.classList.add('hidden');
+    };
+    cancelRequestBtn.onclick = () => { morePostsModal.classList.add('hidden'); hostSetup.classList.remove('hidden'); };
+
+    // Floating action - switch back to host setup
     floatingActionBtn.onclick = () => {
       if (hostSetup.classList.contains('hidden')) {
-        voterPage.classList.add('hidden');
-        hostResult.classList.add('hidden');
-        hostSetup.classList.remove('hidden');
-      } else {
-        hostSetup.classList.add('hidden');
-        home.classList.remove('hidden');
-        floatingActionBtn.classList.add('hidden');
-      }
+        voterPage.classList.add('hidden'); hostResult.classList.add('hidden'); hostSetup.classList.remove('hidden');
+      } else { hostSetup.classList.add('hidden'); home.classList.remove('hidden'); floatingActionBtn.classList.add('hidden'); }
     };
+
+    // Helper: show results only if the local client has the host secret stored
+    // (Client-side check — for production enforce rules in Firestore)
+    async function tryShowResultsIfHost(code) {
+      if (!code) return;
+      const localSecret = localStorage.getItem('hostSecret:' + code);
+      if (!localSecret) return; // not host on this device
+      const doc = await db.collection('rooms').doc(code).get();
+      if (!doc.exists) return;
+      const data = doc.data();
+      if (data.hostSecret === localSecret) {
+        // grant host view
+        isHost = true; currentRoom = code;
+        showResultsFromData(data);
+      }
+    }
+
+    // On load: if room param exists, try to show join code and host view
+    (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const r = params.get('room');
+      if (r) {
+        // try to show host results if host secret exists
+        await tryShowResultsIfHost(r);
+      }
+    })();
   </script>
 </body>
 </html>
