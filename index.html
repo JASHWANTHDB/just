@@ -276,6 +276,17 @@
       transform: scale(1.1);
     }
     
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+    }
+    
     /* Animations */
     @keyframes fadeIn {
       from { opacity: 0; }
@@ -342,6 +353,10 @@
         transform: translateY(100vh) rotate(360deg);
         opacity: 0;
       }
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
     
     /* Responsive */
@@ -442,19 +457,33 @@
     let isHost = false;
     let timer;
     let selectedCandidate = null;
+    let allRooms = {}; // In-memory storage for rooms
+
+    // Initialize rooms from localStorage if available
+    function initializeRooms() {
+      const storedRooms = localStorage.getItem('electionRooms');
+      if (storedRooms) {
+        allRooms = JSON.parse(storedRooms);
+      }
+    }
 
     // Generate random 6-digit code
     function generateCode() {
-      return Math.floor(100000 + Math.random() * 900000).toString();
+      let code;
+      do {
+        code = Math.floor(100000 + Math.random() * 900000).toString();
+      } while (allRooms[code]); // Ensure unique code
+      return code;
     }
 
-    // Save room data in localStorage
+    // Save room data
     function saveRoom(roomCode, data) {
-      localStorage.setItem(roomCode, JSON.stringify(data));
+      allRooms[roomCode] = data;
+      localStorage.setItem('electionRooms', JSON.stringify(allRooms));
     }
 
     function getRoom(roomCode) {
-      return JSON.parse(localStorage.getItem(roomCode));
+      return allRooms[roomCode];
     }
 
     // Show notification
@@ -485,7 +514,34 @@
       }
     }
 
-    // Initialize
+    // Initialize the app
+    function initializeApp() {
+      initializeRooms();
+      
+      // Add ripple effect to buttons
+      document.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', function(e) {
+          const x = e.clientX - e.target.getBoundingClientRect().left;
+          const y = e.clientY - e.target.getBoundingClientRect().top;
+          
+          const ripple = document.createElement('span');
+          ripple.style.left = x + 'px';
+          ripple.style.top = y + 'px';
+          ripple.classList.add('ripple');
+          
+          this.appendChild(ripple);
+          
+          setTimeout(() => {
+            ripple.remove();
+          }, 600);
+        });
+      });
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', initializeApp);
+
+    // Create room button handler
     createRoomBtn.onclick = () => {
       currentRoom = generateCode();
       isHost = true;
@@ -495,7 +551,8 @@
         votes: {}, 
         started: false,
         host: true,
-        morePostsRequested: false
+        morePostsRequested: false,
+        createdAt: new Date().toISOString()
       });
       
       home.classList.add('hidden');
@@ -505,11 +562,17 @@
       showNotification('Election created successfully! Share the code with voters.', 'success');
     };
 
+    // Add candidate button handler
     addCandidateBtn.onclick = () => {
       const name = candidateName.value.trim();
       if (!name) return showNotification("Please enter candidate name", "error");
       
       let roomData = getRoom(currentRoom);
+      if (!roomData) {
+        showNotification("Election room not found. Please create a new one.", "error");
+        return;
+      }
+      
       roomData.candidates.push(name);
       saveRoom(currentRoom, roomData);
       candidateName.value = "";
@@ -534,8 +597,14 @@
       });
     }
 
+    // Start voting button handler
     startVotingBtn.onclick = () => {
       let roomData = getRoom(currentRoom);
+      if (!roomData) {
+        showNotification("Election room not found. Please create a new one.", "error");
+        return;
+      }
+      
       if (roomData.candidates.length === 0) {
         return showNotification("Add at least one candidate!", "error");
       }
@@ -549,21 +618,42 @@
       loadVotingCandidates(roomData.candidates);
     };
 
+    // Join election button handler
     joinBtn.onclick = () => {
       const code = joinCodeInput.value.trim();
       if (!code) return showNotification("Please enter a valid code", "error");
       
-      const roomData = getRoom(code);
-      if (!roomData) return showNotification("No election found for this code", "error");
+      // Show loading state
+      joinBtn.innerHTML = '<span class="loading"></span> Joining...';
+      joinBtn.disabled = true;
       
-      if (!roomData.started) return showNotification("Voting hasn't started yet", "warning");
-      
-      currentRoom = code;
-      isHost = false;
-      home.classList.add('hidden');
-      voterPage.classList.remove('hidden');
-      loadVotingCandidates(roomData.candidates);
-      startTimer(60); // 60 seconds for voting
+      // Simulate network delay
+      setTimeout(() => {
+        const roomData = getRoom(code);
+        if (!roomData) {
+          showNotification("No election found for this code", "error");
+          joinBtn.innerHTML = 'Join Election';
+          joinBtn.disabled = false;
+          return;
+        }
+        
+        if (!roomData.started) {
+          showNotification("Voting hasn't started yet", "warning");
+          joinBtn.innerHTML = 'Join Election';
+          joinBtn.disabled = false;
+          return;
+        }
+        
+        currentRoom = code;
+        isHost = false;
+        home.classList.add('hidden');
+        voterPage.classList.remove('hidden');
+        loadVotingCandidates(roomData.candidates);
+        startTimer(60); // 60 seconds for voting
+        
+        joinBtn.innerHTML = 'Join Election';
+        joinBtn.disabled = false;
+      }, 800);
     };
 
     function loadVotingCandidates(candidates) {
@@ -585,6 +675,11 @@
           selectedCandidate = div;
           
           let roomData = getRoom(currentRoom);
+          if (!roomData) {
+            showNotification("Error submitting vote. Please try again.", "error");
+            return;
+          }
+          
           roomData.votes[c] = (roomData.votes[c] || 0) + 1;
           saveRoom(currentRoom, roomData);
           
@@ -627,6 +722,11 @@
       voterPage.classList.add('hidden');
       hostResult.classList.remove('hidden');
       const roomData = getRoom(currentRoom);
+      if (!roomData) {
+        showNotification("Error loading results", "error");
+        return;
+      }
+      
       results.innerHTML = "";
       
       // Calculate total votes
@@ -673,6 +773,11 @@
       
       // Update room data to mark request as submitted
       let roomData = getRoom(currentRoom);
+      if (!roomData) {
+        showNotification("Error submitting request", "error");
+        return;
+      }
+      
       roomData.morePostsRequested = true;
       saveRoom(currentRoom, roomData);
       
@@ -706,25 +811,6 @@
         floatingActionBtn.classList.add('hidden');
       }
     };
-
-    // Add ripple effect to buttons
-    document.querySelectorAll('button').forEach(button => {
-      button.addEventListener('click', function(e) {
-        const x = e.clientX - e.target.getBoundingClientRect().left;
-        const y = e.clientY - e.target.getBoundingClientRect().top;
-        
-        const ripple = document.createElement('span');
-        ripple.style.left = x + 'px';
-        ripple.style.top = y + 'px';
-        ripple.classList.add('ripple');
-        
-        this.appendChild(ripple);
-        
-        setTimeout(() => {
-          ripple.remove();
-        }, 600);
-      });
-    });
   </script>
 </body>
 </html>
