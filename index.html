@@ -287,6 +287,28 @@
       margin-right: 10px;
     }
     
+    .share-section {
+      margin-top: 15px;
+      padding: 15px;
+      background: var(--light);
+      border-radius: 10px;
+      text-align: center;
+    }
+    
+    .share-btn {
+      background: var(--success);
+      margin-top: 10px;
+    }
+    
+    .qr-code {
+      margin: 15px auto;
+      width: 150px;
+      height: 150px;
+      background: white;
+      padding: 10px;
+      border-radius: 10px;
+    }
+    
     /* Animations */
     @keyframes fadeIn {
       from { opacity: 0; }
@@ -380,6 +402,9 @@
     <button id="createRoomBtn">Generate New Code</button>
     <input type="text" id="joinCode" placeholder="Enter Code to Join">
     <button id="joinBtn">Join Election</button>
+    <div class="share-section">
+      <p><strong>Tip:</strong> Share the election code with voters</p>
+    </div>
   </div>
 
   <!-- Host Setup -->
@@ -387,6 +412,16 @@
     <h2>Host: Setup Election</h2>
     <p><strong>Share this code with voters:</strong></p>
     <div class="code-display" id="roomCodeDisplay"></div>
+    
+    <div class="share-section">
+      <p>Share this election with others:</p>
+      <button class="share-btn" id="shareLinkBtn">Copy Share Link</button>
+      <div class="qr-code" id="qrCode">
+        <p>QR Code Placeholder</p>
+        <p>(In a real app, this would generate a QR code)</p>
+      </div>
+    </div>
+    
     <input type="text" id="candidateName" placeholder="Add candidate name">
     <button id="addCandidateBtn">Add Candidate</button>
     <div id="candidateList"></div>
@@ -442,6 +477,7 @@
     const submitRequestBtn = document.getElementById('submitRequestBtn');
     const cancelRequestBtn = document.getElementById('cancelRequestBtn');
     const floatingActionBtn = document.getElementById('floatingActionBtn');
+    const shareLinkBtn = document.getElementById('shareLinkBtn');
 
     const joinCodeInput = document.getElementById('joinCode');
     const candidateName = document.getElementById('candidateName');
@@ -464,6 +500,13 @@
       const storedRooms = localStorage.getItem('electionRooms');
       if (storedRooms) {
         allRooms = JSON.parse(storedRooms);
+      }
+      
+      // Check if we have a room code in URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomCodeFromUrl = urlParams.get('room');
+      if (roomCodeFromUrl) {
+        joinCodeInput.value = roomCodeFromUrl;
       }
     }
 
@@ -562,6 +605,25 @@
       showNotification('Election created successfully! Share the code with voters.', 'success');
     };
 
+    // Share link button handler
+    shareLinkBtn.onclick = () => {
+      const shareUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
+      
+      // Copy to clipboard
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        showNotification('Share link copied to clipboard!', 'success');
+      }).catch(() => {
+        // Fallback for browsers that don't support clipboard API
+        const tempInput = document.createElement('input');
+        tempInput.value = shareUrl;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+        showNotification('Share link copied to clipboard!', 'success');
+      });
+    };
+
     // Add candidate button handler
     addCandidateBtn.onclick = () => {
       const name = candidateName.value.trim();
@@ -631,14 +693,14 @@
       setTimeout(() => {
         const roomData = getRoom(code);
         if (!roomData) {
-          showNotification("No election found for this code", "error");
+          showNotification("No election found for this code. Make sure the host has created the election.", "error");
           joinBtn.innerHTML = 'Join Election';
           joinBtn.disabled = false;
           return;
         }
         
         if (!roomData.started) {
-          showNotification("Voting hasn't started yet", "warning");
+          showNotification("Voting hasn't started yet. Please wait for the host to begin.", "warning");
           joinBtn.innerHTML = 'Join Election';
           joinBtn.disabled = false;
           return;
