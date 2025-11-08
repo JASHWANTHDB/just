@@ -485,11 +485,31 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const auth = firebase.auth();
-    
-    // Sign in anonymously on page load
-    auth.signInAnonymously().catch(error => {
-      console.error('Auth error:', error);
-      showNotification('Authentication failed', 'error');
+
+    // Auth state tracking
+    let authReady = false;
+    let currentUid = null;
+
+    // Disable buttons until auth is ready to avoid null uid errors
+    createRoomBtn.disabled = true;
+    joinBtn.disabled = true;
+
+    // Sign in anonymously on page load and listen for state
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        authReady = true;
+        currentUid = user.uid;
+        // enable primary actions
+        createRoomBtn.disabled = false;
+        joinBtn.disabled = false;
+        console.log('Signed in anonymously as', currentUid);
+      } else {
+        // attempt sign-in if signed out
+        auth.signInAnonymously().catch(error => {
+          console.error('Auth sign-in error:', error);
+          showNotification('Authentication failed: ' + (error.message || error), 'error');
+        });
+      }
     });
 
     // DOM Elements
@@ -602,6 +622,10 @@
     // CREATE ROOM - host
     createRoomBtn.onclick = async () => {
       try {
+        if (!authReady || !currentUid) {
+          showNotification('Authentication not ready — please wait a moment and try again.', 'warning');
+          return;
+        }
         createRoomBtn.disabled = true;
         const code = await generateUniqueCode();
         const hostSecret = uuidv4();
@@ -610,7 +634,7 @@
           votes: {},
           started: false,
           hostSecret: hostSecret,
-          hostUid: auth.currentUser.uid, // Store host's UID
+          hostUid: currentUid, // Store host's UID
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           durationSeconds: 60,
           voters: {}
@@ -741,9 +765,12 @@
           voteCandidates.querySelectorAll('.candidate').forEach(el => el.style.pointerEvents = 'none');
           try {
             // Atomic increment using transaction with voter tracking
+            if (!authReady || !currentUid) {
+              showNotification('Authentication not ready — cannot submit vote yet.', 'warning');
+              return;
+            }
             const roomRef = db.collection('rooms').doc(currentRoom);
-            const voterUid = auth.currentUser.uid;
-            
+            const voterUid = currentUid;
             await db.runTransaction(async tx => {
               const roomSnap = await tx.get(roomRef);
               if (!roomSnap.exists) throw new Error('Room not found');
