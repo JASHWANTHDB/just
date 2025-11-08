@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>College Election Voting</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+    
+    :root {
+      --primary: #4f46e5;
+      --primary-dark: #4338ca;
+      --secondary: #3b82f6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --light: #f3f4f6;
+      --dark: #1f2937;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+    
+    h1 {
+      margin-top: 20px;
+      font-size: 2.5rem;
+      text-align: center;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      animation: fadeInDown 0.8s ease-out;
+    }
+    
+    .card {
+      background: #fff;
+      color: var(--dark);
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      margin-top: 25px;
+      width: 100%;
+      max-width: 500px;
+      transition: transform 0.3s, box-shadow 0.3s;
+      animation: fadeInUp 0.6s ease-out;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 30px rgba(0,0,0,0.25);
+    }
+    
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 5px;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+    }
+    
+    .card input, .card button, .card textarea {
+      width: 100%;
+      padding: 12px 15px;
+      margin-top: 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 1rem;
+      transition: all 0.3s;
+    }
+    
+    .card input:focus, .card textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
+    }
+    
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    button:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.5);
+      opacity: 0;
+      border-radius: 100%;
+      transform: scale(1, 1) translate(-50%);
+      transform-origin: 50% 50%;
+    }
+    
+    button:focus:not(:active)::after {
+      animation: ripple 1s ease-out;
+    }
+    
+    .candidate {
+      background: var(--light);
+      margin-top: 10px;
+      padding: 15px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      animation: fadeIn 0.5s ease-out;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .candidate:hover {
+      background: #e5e7eb;
+      transform: translateX(5px);
+    }
+    
+    .candidate.selected {
+      background: rgba(79, 70, 229, 0.1);
+      border-left: 4px solid var(--primary);
+    }
+    
+    .candidate-number {
+      background: var(--primary);
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 15px;
+      font-weight: bold;
+    }
+    
+    .hidden { 
+      display: none; 
+    }
+    
+    .timer {
+      font-weight: bold;
+      font-size: 1.2rem;
+      color: var(--warning);
+      margin-top: 15px;
+      text-align: center;
+      animation: pulse 1.5s infinite;
+    }
+    
+    .code-display {
+      background: var(--light);
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+      letter-spacing: 3px;
+      margin: 15px 0;
+      animation: fadeIn 0.5s ease-out;
+    }
+    
+    .result-bar {
+      height: 30px;
+      background: var(--light);
+      border-radius: 15px;
+      margin: 10px 0;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .result-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      border-radius: 15px;
+      transition: width 1s ease-out;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 15px;
+      color: white;
+      font-weight: bold;
+    }
+    
+    .confetti {
+      position: fixed;
+      width: 10px;
+      height: 10px;
+      background-color: var(--primary);
+      top: -10px;
+      opacity: 0;
+    }
+    
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 15px 25px;
+      background: white;
+      color: var(--dark);
+      border-radius: 8px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+      z-index: 1000;
+      transform: translateX(150%);
+      transition: transform 0.4s ease-out;
+    }
+    
+    .notification.show {
+      transform: translateX(0);
+    }
+    
+    .notification.success {
+      border-left: 4px solid var(--success);
+    }
+    
+    .notification.error {
+      border-left: 4px solid var(--danger);
+    }
+    
+    .notification.warning {
+      border-left: 4px solid var(--warning);
+    }
+    
+    .floating-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      cursor: pointer;
+      z-index: 100;
+      transition: all 0.3s;
+      animation: bounce 2s infinite;
+    }
+    
+    .floating-btn:hover {
+      transform: scale(1.1);
+    }
+    
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    
+    @keyframes ripple {
+      0% {
+        transform: scale(0, 0);
+        opacity: 0.5;
+      }
+      100% {
+        transform: scale(20, 20);
+        opacity: 0;
+      }
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+      }
+      40% {
+        transform: translateY(-10px);
+      }
+      60% {
+        transform: translateY(-5px);
+      }
+    }
+    
+    @keyframes confettiFall {
+      0% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(100vh) rotate(360deg);
+        opacity: 0;
+      }
+    }
+    
+    /* Responsive */
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 2rem;
+      }
+      
+      .card {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>College Election Voting System</h1>
+
+  <!-- Home Card -->
+  <div class="card" id="home">
+    <h2>Join or Create Election</h2>
+    <button id="createRoomBtn">Generate New Code</button>
+    <input type="text" id="joinCode" placeholder="Enter Code to Join">
+    <button id="joinBtn">Join Election</button>
+  </div>
+
+  <!-- Host Setup -->
+  <div class="card hidden" id="hostSetup">
+    <h2>Host: Setup Election</h2>
+    <p><strong>Share this code with voters:</strong></p>
+    <div class="code-display" id="roomCodeDisplay"></div>
+    <input type="text" id="candidateName" placeholder="Add candidate name">
+    <button id="addCandidateBtn">Add Candidate</button>
+    <div id="candidateList"></div>
+    <button id="startVotingBtn">Start Voting</button>
+    <button id="morePostsBtn" class="hidden" style="margin-top: 15px; background: var(--warning);">Request More Posts</button>
+  </div>
+
+  <!-- Voter Page -->
+  <div class="card hidden" id="voterPage">
+    <h2>Vote Your Candidate</h2>
+    <div id="voteCandidates"></div>
+    <div class="timer" id="voteTimer"></div>
+  </div>
+
+  <!-- Host Result Page -->
+  <div class="card hidden" id="hostResult">
+    <h2>Voting Results</h2>
+    <div id="results"></div>
+    <button id="newElectionBtn" style="margin-top: 20px;">Start New Election</button>
+  </div>
+
+  <!-- More Posts Request Modal -->
+  <div class="card hidden" id="morePostsModal">
+    <h2>Request More Posts</h2>
+    <p>Please describe why you need more posts for this election:</p>
+    <textarea id="reasonText" rows="4" placeholder="Enter your reason here..."></textarea>
+    <button id="submitRequestBtn">Submit Request</button>
+    <button id="cancelRequestBtn" style="background: var(--danger); margin-top: 10px;">Cancel</button>
+  </div>
+
+  <!-- Notification -->
+  <div class="notification" id="notification"></div>
+
+  <!-- Floating action button for host -->
+  <div class="floating-btn hidden" id="floatingActionBtn">
+    <i>⚙️</i>
+  </div>
+
+  <script>
+    // DOM Elements
+    const home = document.getElementById('home');
+    const hostSetup = document.getElementById('hostSetup');
+    const voterPage = document.getElementById('voterPage');
+    const hostResult = document.getElementById('hostResult');
+    const morePostsModal = document.getElementById('morePostsModal');
+
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const joinBtn = document.getElementById('joinBtn');
+    const addCandidateBtn = document.getElementById('addCandidateBtn');
+    const startVotingBtn = document.getElementById('startVotingBtn');
+    const morePostsBtn = document.getElementById('morePostsBtn');
+    const newElectionBtn = document.getElementById('newElectionBtn');
+    const submitRequestBtn = document.getElementById('submitRequestBtn');
+    const cancelRequestBtn = document.getElementById('cancelRequestBtn');
+    const floatingActionBtn = document.getElementById('floatingActionBtn');
+
+    const joinCodeInput = document.getElementById('joinCode');
+    const candidateName = document.getElementById('candidateName');
+    const candidateList = document.getElementById('candidateList');
+    const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+    const voteCandidates = document.getElementById('voteCandidates');
+    const voteTimer = document.getElementById('voteTimer');
+    const results = document.getElementById('results');
+    const reasonText = document.getElementById('reasonText');
+    const notification = document.getElementById('notification');
+
+    let currentRoom = null;
+    let isHost = false;
+    let timer;
+    let selectedCandidate = null;
+
+    // Generate random 6-digit code
+    function generateCode() {
+      return Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
+    // Save room data in localStorage
+    function saveRoom(roomCode, data) {
+      localStorage.setItem(roomCode, JSON.stringify(data));
+    }
+
+    function getRoom(roomCode) {
+      return JSON.parse(localStorage.getItem(roomCode));
+    }
+
+    // Show notification
+    function showNotification(message, type = 'success') {
+      notification.textContent = message;
+      notification.className = `notification ${type} show`;
+      
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // Create confetti effect
+    function createConfetti() {
+      const colors = ['#4f46e5', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+      
+      for (let i = 0; i < 100; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = Math.random() * 100 + 'vw';
+        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.animation = `confettiFall ${Math.random() * 3 + 2}s linear forwards`;
+        document.body.appendChild(confetti);
+        
+        setTimeout(() => {
+          confetti.remove();
+        }, 5000);
+      }
+    }
+
+    // Initialize
+    createRoomBtn.onclick = () => {
+      currentRoom = generateCode();
+      isHost = true;
+      roomCodeDisplay.textContent = currentRoom;
+      saveRoom(currentRoom, { 
+        candidates: [], 
+        votes: {}, 
+        started: false,
+        host: true,
+        morePostsRequested: false
+      });
+      
+      home.classList.add('hidden');
+      hostSetup.classList.remove('hidden');
+      floatingActionBtn.classList.remove('hidden');
+      
+      showNotification('Election created successfully! Share the code with voters.', 'success');
+    };
+
+    addCandidateBtn.onclick = () => {
+      const name = candidateName.value.trim();
+      if (!name) return showNotification("Please enter candidate name", "error");
+      
+      let roomData = getRoom(currentRoom);
+      roomData.candidates.push(name);
+      saveRoom(currentRoom, roomData);
+      candidateName.value = "";
+      updateCandidateList(roomData.candidates);
+      
+      // Show more posts button if we have 3 or more candidates
+      if (roomData.candidates.length >= 3 && !roomData.morePostsRequested) {
+        morePostsBtn.classList.remove('hidden');
+      }
+    };
+
+    function updateCandidateList(list) {
+      candidateList.innerHTML = "";
+      list.forEach((c, i) => {
+        const div = document.createElement('div');
+        div.className = 'candidate';
+        div.innerHTML = `
+          <div class="candidate-number">${i+1}</div>
+          <div>${c}</div>
+        `;
+        candidateList.appendChild(div);
+      });
+    }
+
+    startVotingBtn.onclick = () => {
+      let roomData = getRoom(currentRoom);
+      if (roomData.candidates.length === 0) {
+        return showNotification("Add at least one candidate!", "error");
+      }
+      
+      roomData.started = true;
+      saveRoom(currentRoom, roomData);
+      hostSetup.classList.add('hidden');
+      voterPage.classList.remove('hidden');
+      floatingActionBtn.classList.add('hidden');
+      startTimer(60); // 60 seconds for voting
+      loadVotingCandidates(roomData.candidates);
+    };
+
+    joinBtn.onclick = () => {
+      const code = joinCodeInput.value.trim();
+      if (!code) return showNotification("Please enter a valid code", "error");
+      
+      const roomData = getRoom(code);
+      if (!roomData) return showNotification("No election found for this code", "error");
+      
+      if (!roomData.started) return showNotification("Voting hasn't started yet", "warning");
+      
+      currentRoom = code;
+      isHost = false;
+      home.classList.add('hidden');
+      voterPage.classList.remove('hidden');
+      loadVotingCandidates(roomData.candidates);
+      startTimer(60); // 60 seconds for voting
+    };
+
+    function loadVotingCandidates(candidates) {
+      voteCandidates.innerHTML = "";
+      candidates.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'candidate';
+        div.innerHTML = `
+          <div>${c}</div>
+        `;
+        div.onclick = () => {
+          // Deselect previous selection
+          if (selectedCandidate) {
+            selectedCandidate.classList.remove('selected');
+          }
+          
+          // Select new candidate
+          div.classList.add('selected');
+          selectedCandidate = div;
+          
+          let roomData = getRoom(currentRoom);
+          roomData.votes[c] = (roomData.votes[c] || 0) + 1;
+          saveRoom(currentRoom, roomData);
+          
+          showNotification("Vote submitted successfully!", "success");
+          
+          // Disable further voting
+          voteCandidates.querySelectorAll('.candidate').forEach(el => {
+            el.style.pointerEvents = "none";
+          });
+        };
+        voteCandidates.appendChild(div);
+      });
+    }
+
+    function startTimer(seconds) {
+      let timeLeft = seconds;
+      voteTimer.textContent = `Time left: ${timeLeft}s`;
+      timer = setInterval(() => {
+        timeLeft--;
+        voteTimer.textContent = `Time left: ${timeLeft}s`;
+        
+        if (timeLeft <= 10) {
+          voteTimer.style.color = 'var(--danger)';
+        }
+        
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          voteTimer.textContent = "Voting Closed!";
+          
+          if (isHost) {
+            setTimeout(showResults, 1500);
+          } else {
+            showNotification("Voting time over! Please wait for host to announce results.", "warning");
+          }
+        }
+      }, 1000);
+    }
+
+    function showResults() {
+      voterPage.classList.add('hidden');
+      hostResult.classList.remove('hidden');
+      const roomData = getRoom(currentRoom);
+      results.innerHTML = "";
+      
+      // Calculate total votes
+      const totalVotes = Object.values(roomData.votes).reduce((a, b) => a + b, 0);
+      
+      // Sort candidates by votes
+      const sortedCandidates = Object.entries(roomData.votes)
+        .sort((a, b) => b[1] - a[1]);
+      
+      sortedCandidates.forEach(([name, count]) => {
+        const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+        
+        const resultItem = document.createElement('div');
+        resultItem.innerHTML = `
+          <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <span>${name}</span>
+            <span>${count} votes (${percentage}%)</span>
+          </div>
+          <div class="result-bar">
+            <div class="result-fill" style="width: ${percentage}%">${percentage}%</div>
+          </div>
+        `;
+        results.appendChild(resultItem);
+      });
+      
+      // Create confetti for the winner
+      if (sortedCandidates.length > 0) {
+        createConfetti();
+      }
+    }
+
+    // More Posts functionality
+    morePostsBtn.onclick = () => {
+      hostSetup.classList.add('hidden');
+      morePostsModal.classList.remove('hidden');
+    };
+
+    submitRequestBtn.onclick = () => {
+      const reason = reasonText.value.trim();
+      if (!reason) return showNotification("Please provide a reason", "error");
+      
+      // In a real app, this would send the request to an admin
+      showNotification("Request submitted! An admin will review it shortly.", "success");
+      
+      // Update room data to mark request as submitted
+      let roomData = getRoom(currentRoom);
+      roomData.morePostsRequested = true;
+      saveRoom(currentRoom, roomData);
+      
+      morePostsModal.classList.add('hidden');
+      hostSetup.classList.remove('hidden');
+      morePostsBtn.classList.add('hidden');
+    };
+
+    cancelRequestBtn.onclick = () => {
+      morePostsModal.classList.add('hidden');
+      hostSetup.classList.remove('hidden');
+    };
+
+    // New election button
+    newElectionBtn.onclick = () => {
+      hostResult.classList.add('hidden');
+      home.classList.remove('hidden');
+      currentRoom = null;
+      isHost = false;
+    };
+
+    // Floating action button for host
+    floatingActionBtn.onclick = () => {
+      if (hostSetup.classList.contains('hidden')) {
+        voterPage.classList.add('hidden');
+        hostResult.classList.add('hidden');
+        hostSetup.classList.remove('hidden');
+      } else {
+        hostSetup.classList.add('hidden');
+        home.classList.remove('hidden');
+        floatingActionBtn.classList.add('hidden');
+      }
+    };
+
+    // Add ripple effect to buttons
+    document.querySelectorAll('button').forEach(button => {
+      button.addEventListener('click', function(e) {
+        const x = e.clientX - e.target.getBoundingClientRect().left;
+        const y = e.clientY - e.target.getBoundingClientRect().top;
+        
+        const ripple = document.createElement('span');
+        ripple.style.left = x + 'px';
+        ripple.style.top = y + 'px';
+        ripple.classList.add('ripple');
+        
+        this.appendChild(ripple);
+        
+        setTimeout(() => {
+          ripple.remove();
+        }, 600);
+      });
+    });
+  </script>
+</body>
+</html>
