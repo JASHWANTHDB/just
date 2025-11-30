@@ -1,0 +1,29 @@
+{
+  "name": "villa-garden-maintenance",
+  "version": "1.0.0",
+  "description": "MERN application for villa and garden maintenance management",
+  "main": "backend/server.js",
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install && cd ..",
+    "seed": "cd backend && npm run seed",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm run dev",
+    "build": "cd backend && npm install && cd ../frontend && npm install && npm run build",
+    "start": "cd backend && npm start"
+  },
+  "keywords": [
+    "villa",
+    "maintenance",
+    "MERN",
+    "MongoDB",
+    "Express",
+    "React",
+    "Node.js"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  }
+}
